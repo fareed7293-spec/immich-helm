@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-machine-learning
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-machine-learning
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-machine-learning
+    spec:
+      containers:
+        - name: machine-learning
+          image: "ghcr.io/immich-app/immich-machine-learning:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: IMMICH_HOST
+              value: "0.0.0.0"
+            - name: IMMICH_PORT
+              value: "3003"
+          ports:
+            - containerPort: 3003
+              name: http
+          volumeMounts:
+            - name: model-cache
+              mountPath: /cache
+      volumes:
+        - name: model-cache
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-machine-learning
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ .Release.Name }}-machine-learning
+  ports:
+    - name: http
+      port: 3003
+      targetPort: 3003

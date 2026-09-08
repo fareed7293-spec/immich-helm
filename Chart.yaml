@@ -1,0 +1,6 @@
+apiVersion: v2
+name: immich
+description: High-performance self-hosted photo backup solution
+type: application
+version: 1.0.0
+appVersion: "v1.105.0"

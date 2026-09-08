@@ -1,0 +1,72 @@
+{{- if .Values.dbBackup.enabled }}
+{{- if not .Values.dbBackup.existingClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-db-backup-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: {{ .Values.dbBackup.storageClass | quote }}
+  resources:
+    requests:
+      storage: {{ .Values.dbBackup.size | default "20Gi" }}
+---
+{{- end }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-postgres-backup
+  namespace: {{ .Release.Namespace }}
+spec:
+  schedule: {{ .Values.dbBackup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: pg-dumper
+            image: postgres:17-alpine
+            env:
+            - name: PGHOST
+              value: "{{ .Release.Name }}-postgres.{{ .Release.Namespace }}.svc.cluster.local"
+            - name: PGUSER
+              value: "postgres"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dbBackup.secretName | default (printf "%s-secrets" .Release.Name) }}
+                  key: DB_PASSWORD
+                  #name: "immich-db-secret"
+                  #key: "password"
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              DATE=$(date +%F_%H%M%S)
+              TARGET_DIR="/backup-dir/db_dumps"
+              mkdir -p "$TARGET_DIR"
+              TARGET_FILE="${TARGET_DIR}/immich_db_${DATE}.sql.gz"
+
+              echo "[*] Exporting PostgreSQL dump to Alpine NFS..."
+              pg_dumpall -h "$PGHOST" -U "$PGUSER" --clean --if-exists | gzip > "$TARGET_FILE"
+              echo "[*] Successfully saved: $TARGET_FILE"
+
+              echo "[*] Cleaning up dumps older than {{ .Values.dbBackup.retentionDays }} days..."
+              find "$TARGET_DIR" -name "immich_db_*.sql.gz" -type f -mtime +{{ .Values.dbBackup.retentionDays }} -delete
+              echo "[✓] Complete."
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backup-dir
+          restartPolicy: OnFailure
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: {{ .Values.dbBackup.existingClaim | default (printf "%s-db-backup-pvc" ( .Release.Name )) }}
+{{- end }}

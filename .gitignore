@@ -1,0 +1,8 @@
+*.tgz
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.bak
+*secret*.yaml
+rendered-manifests/

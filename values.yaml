@@ -1,0 +1,49 @@
+image:
+  repository: ghcr.io/immich-app/immich-server
+  tag: "v3.1.0"
+  pullPolicy: IfNotPresent
+
+host: "immich1.fareed.in"
+
+storage:
+  className: "nfs-client-retain"
+  upload:
+    size: 1500Gi
+#  db:
+#    size: 5Gi
+
+postgres:
+ # For local storage
+  enabled: true
+#  primary:
+#    persistence:
+#      enabled: true
+
+#  ----------
+  image:
+    repository: pgvector/pgvector
+    tag: "pg17"
+  database: "immich"
+  user: "postgres"
+
+
+redis:
+  image:
+    repository: redis
+    tag: "8.10.0-alpine3.23"
+
+secrets:
+  dbPassword: "password"
+
+
+
+
+# Weekly DB Backup CronJob configuration to Alpine NFS
+dbBackup:
+  enabled: true
+  schedule: "0 3 * * 0"           # Every Sunday at 03:00 AM
+  retentionDays: 30
+  secretName: "immich-secrets" # Changed from immich-db-secret
+  storageClass: "nfs-client-retain"      # <--- Replace with your existing NFS StorageClass name
+ # existingClaim: "immich-db-backup-pvc" # (Optional: Uncomment to reuse an existing PVC directly)
+  size: 20Gi

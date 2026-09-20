@@ -4,7 +4,7 @@ metadata:
   name: {{ .Release.Name }}-server
   namespace: {{ .Release.Namespace }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.server.replicas | default 1 }}
   selector:
     matchLabels:
       app: {{ .Release.Name }}-server
@@ -12,22 +12,47 @@ spec:
     metadata:
       labels:
         app: {{ .Release.Name }}-server
+      {{- with .Values.server.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
+      {{- with .Values.server.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: link-nvidia-libs
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mkdir -p /usr/local/nvidia-dist
+              # Copy or symlink ONLY nvidia/cuda libraries
+              for f in /host-libs/libcuda* /host-libs/libnvidia* /host-libs/libnvcuvid*; do
+                [ -e "$f" ] && cp -a "$f" /usr/local/nvidia-dist/
+              done
+              echo "/usr/local/nvidia-dist" > /ld-conf/nvidia.conf
+          volumeMounts:
+            - name: host-usr-local-lib
+              mountPath: /host-libs
+              readOnly: true
+            - name: nvidia-isolated-libs
+              mountPath: /usr/local/nvidia-dist
+            - name: etc-ld-conf
+              mountPath: /ld-conf
       containers:
         - name: server
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          #command: ["node"]
-          #args: ["/usr/src/app/dist/main.js", "immich"]
           env:
-            # --- FORCE BIND TO ALL INTERFACES AND CORRECT PORT ---
             - name: IMMICH_APP
               value: "immich"
             - name: IMMICH_HOST
               value: "0.0.0.0"
             - name: IMMICH_PORT
               value: "2283"
-            # -----------------------------------------------------
             - name: DB_HOSTNAME
               value: "{{ .Release.Name }}-postgres.{{ .Release.Namespace }}.svc.cluster.local"
             - name: DB_USERNAME
@@ -49,13 +74,39 @@ spec:
               value: "{{ .Release.Name }}-redis.{{ .Release.Namespace }}.svc.cluster.local"
             - name: IMMICH_MACHINE_LEARNING_URL
               value: "http://{{ .Release.Name }}-machine-learning.{{ .Release.Namespace }}.svc.cluster.local:3003"
+            {{- with .Values.server.env }}
+            {{- range $key, $val := . }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+            {{- end }}
+            - name: LD_LIBRARY_PATH
+              value: "/usr/local/nvidia-dist"
           ports:
             - containerPort: 2283
               name: http
+          {{- with .Values.server.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: immich-upload
               mountPath: /usr/src/app/upload
+            - name: nvidia-isolated-libs
+              mountPath: /usr/local/nvidia-dist
+              readOnly: true
+            - name: etc-ld-conf
+              mountPath: /etc/ld.so.conf.d/nvidia.conf
+              subPath: nvidia.conf
+              readOnly: true
       volumes:
         - name: immich-upload
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-upload-pvc
+        - name: host-usr-local-lib
+          hostPath:
+            path: /usr/local/lib
+        - name: nvidia-isolated-libs
+          emptyDir: {}
+        - name: etc-ld-conf
+          emptyDir: {}

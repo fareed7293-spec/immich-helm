@@ -47,3 +47,24 @@ dbBackup:
   storageClass: "nfs-client-retain"      # <--- Replace with your existing NFS StorageClass name
  # existingClaim: "immich-db-backup-pvc" # (Optional: Uncomment to reuse an existing PVC directly)
   size: 20Gi
+
+server:
+  podAnnotations:
+    cdi.k8s.io/nvidia: "nvidia.com/gpu=all"
+  nodeSelector:
+    nvidia.com/gpu.present: "true"
+  resources:
+    limits:
+      nvidia.com/gpu: 1
+  env:
+    NVIDIA_VISIBLE_DEVICES: "all"
+    NVIDIA_DRIVER_CAPABILITIES: "video,compute,utility"
+
+
+machine-learning:
+  image:
+    repository: ghcr.io/immich-app/immich-machine-learning
+    tag: release
+  resources: {}
+
+

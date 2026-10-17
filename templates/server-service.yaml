@@ -19,11 +19,30 @@ kind: Service
 metadata:
   name: immich-server-ext
   namespace: immich
+  labels:
+    io.cilium/loadbalancer-mode: "l2"
+    app: "immich-server"
+  annotations:
+    lbipam.cilium.io/ips: "192.168.1.125"
 spec:
-  type: NodePort
-  selector:
-    app: immich-server
+  type: LoadBalancer
   ports:
-    - name: http
-      port: 2283
+    - port: 2283
       targetPort: 2283
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: immich-server
+
+#apiVersion: v1
+#kind: Service
+#metadata:
+#  name: immich-server-ext
+#  namespace: immich
+#spec:
+#  type: NodePort
+#  selector:
+#    app: immich-server
+#  ports:
+#    - name: http
+#      port: 2283
+#      targetPort: 2283
